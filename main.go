@@ -6,11 +6,16 @@ import (
 	"log"
 	"os"
 	"reflect"
+	"time"
+
+	"gopkg.in/mgo.v2/bson"
 )
 
-type User struct {
-	Name string `json:"name" column:"name"`
-	Age  int    `json:"age" column:"age"`
+type Barrage struct {
+	UserID    bson.ObjectId `bson:"user_id"`
+	RoomID    bson.ObjectId `bson:"room_id"`
+	Message   string        `bson:"message"`
+	CreatedAt time.Time     `bson:"created_at"`
 }
 
 var (
@@ -19,6 +24,8 @@ var (
 
 // 0. 指定tagname
 // 1. 扫描文件所有的struct, 并且读取所有的struct name
+// 1.1 读取指定文件到
+// 1.2 使用ast token.NewFileSet
 // 2. 读取所有的FieldName
 // 3. 将数据填写到template中
 // 4. 生成一个lower case structName_column.go文件
@@ -28,7 +35,7 @@ var temp2 = `
 
 type {{.StructName}}Column struct {
 {{range $key, $value := .Columns}}
-  {{ $key }}: string
+  {{ $key }} string
 {{end}}
 }
 
@@ -36,7 +43,7 @@ var {{.StructName}}Columns  {{.StructName}}Column
 
 func init() {
 {{range $key, $value := .Columns}}
-{{ $.StructName}}.{{$key}} = "{{$value}}"
+{{ $.StructName}}Columns.{{$key}} = "{{$value}}"
 {{end}}
 }
 
@@ -46,7 +53,7 @@ func main() {
 	log.SetFlags(log.Lshortfile | log.Ltime)
 	flag.Parse()
 
-	var u User
+	var u Barrage
 
 	name := GetStructName(u)
 	columns := GetFiledWithTag(u, *tagName)
