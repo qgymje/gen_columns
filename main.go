@@ -1,48 +1,30 @@
 package main
 
 import (
+	"bytes"
 	"flag"
+	"fmt"
+	"go/ast"
+	"go/format"
+	"go/parser"
+	"go/token"
 	"html/template"
+	"io"
 	"log"
 	"os"
-	"reflect"
-	"time"
-
-	"gopkg.in/mgo.v2/bson"
+	"path/filepath"
+	"regexp"
+	"strings"
 )
 
 var (
-	tagName = flag.String("tag", "column", "请指定tag")
+	tagName = flag.String("tag", "bson", "tag name")
+	path    = flag.String("path", "./", "file path")
+	debug   = flag.Bool("debug", false, "show generated data")
 )
 
-type BroadcastRoom struct {
-	ID          bson.ObjectId   `bson:"_id"`
-	UserID      bson.ObjectId   `json:"userID" bson:"userId"`           //用户ID
-	RoomID      int64           `bson:"roomID"`                         // RoomID号
-	Name        string          `json:"name" bson:"name"`               //标题
-	Cover       string          `json:"cover" bson:"cover"`             //封面图片地址
-	Domain      string          `json:"-" bson:"domain"`                //个性域名
-	Channel     []string        `json:"channel" bson:"channel"`         //领域
-	Score       int32           `json:"score" bson:"score"`             //分数
-	Tags        []string        `json:"tags" bson:"tags"`               //标签
-	IsPlaying   bool            `json:"isPlaying" bson:"isPlaying"`     //是否正在直播
-	AdminUsers  []bson.ObjectId `json:"adminUsers" bson:"adminUsers"`   //管理员ID
-	ValidStatus int8            `json:"validStatus" bson:"validStatus"` //0 申请中未审核,1 审核通过, -1 审核失败
-	Orientation int8            `json:"orientation" bson:"orientation"` //横竖屏 0 未设置 1 横屏 2 竖屏
-	CreatedTime time.Time       `json:"createdTime" bson:"createdTime"` //创建时间
-	UpdatedTime time.Time       `json:"updatedTime" bson:"updatedTime"` //更新时间
-}
-
-// 0. 指定tagname
-// 1. 扫描文件所有的struct, 并且读取所有的struct name
-// 1.1 读取指定文件到
-// 1.2 使用ast token.NewFileSet
-// 2. 读取所有的FieldName
-// 3. 将数据填写到template中
-// 4. 生成一个lower case structName_column.go文件
-
-var temp2 = `
-//package PackageName
+var temp = `
+package {{.PackageName}}
 
 type {{.StructName}}Column struct {
 {{range $key, $value := .Columns}} {{ $key }} string 
@@ -57,35 +39,104 @@ func init() {
 }
 `
 
+type TempData struct {
+	FileName    string
+	PackageName string
+	StructName  string
+	Columns     map[string]string
+}
+
 func main() {
 	log.SetFlags(log.Lshortfile | log.Ltime)
 	flag.Parse()
 
-	var s BroadcastRoom
-
-	name := GetStructName(s)
-	columns := GetFiledWithTag(s, *tagName)
-
-	data := map[string]interface{}{
-		"StructName": name,
-		"Columns":    columns,
-	}
-
-	template.Must(template.New("temp2").Parse(temp2)).Execute(os.Stdout, data)
+	filepath.Walk(*path, func(filename string, f os.FileInfo, _ error) error {
+		if filepath.Ext(filename) == ".go" {
+			if strings.Contains(filename, "_column") {
+				return nil
+			}
+			return handleFile(filename)
+		}
+		return nil
+	})
 }
 
-func GetStructName(i interface{}) string {
-	t := reflect.TypeOf(i)
-	return t.Name()
+func handleFile(filename string) error {
+	var tempData TempData
+	tempData.Columns = make(map[string]string)
+
+	fset := token.NewFileSet()
+	var src interface{}
+	f, err := parser.ParseFile(fset, filename, src, 0)
+	if err != nil {
+		panic(err)
+	}
+
+	//ast.Print(fset, f)
+	tempData.PackageName = f.Name.Name
+	tempData.FileName = filename
+
+	ast.Inspect(f, func(n ast.Node) bool {
+		switch x := n.(type) {
+
+		case *ast.GenDecl:
+			if x.Tok == token.TYPE {
+				for _, s := range x.Specs {
+					vSpec := s.(*ast.TypeSpec)
+					if _, ok := vSpec.Type.(*ast.StructType); ok {
+						tempData.StructName = vSpec.Name.Name
+					}
+				}
+			}
+
+		case *ast.StructType:
+			for _, f := range x.Fields.List {
+				if f.Tag != nil {
+					tag := handleTags(f.Tag.Value)
+					tempData.Columns[f.Names[0].Name] = tag
+				}
+			}
+		}
+		return true
+	})
+
+	if *debug {
+		//spew.Dump(tempData)
+		tempData.writeTo(os.Stdout)
+	}
+	return tempData.WriteToFile()
 }
 
-func GetFiledWithTag(i interface{}, tagName string) map[string]string {
-	columns := make(map[string]string)
-	t := reflect.TypeOf(i)
-	for i := 0; i < t.NumField(); i++ {
-		field := t.Field(i).Name
-		tag := t.Field(i).Tag.Get(tagName)
-		columns[field] = tag
+func handleTags(tags string) string {
+	re := regexp.MustCompile(fmt.Sprintf(`%s:"(.*?)"`, *tagName))
+	matchs := re.FindStringSubmatch(tags)
+	if len(matchs) >= 1 {
+		return matchs[1]
 	}
-	return columns
+	return ""
+}
+
+func (d *TempData) handleFilename() {
+	absPath, _ := filepath.Abs(d.FileName)
+	basePath := filepath.Dir(absPath)
+	d.FileName = basePath + "/" + d.StructName + "_column.go"
+}
+
+func (d *TempData) writeTo(w io.Writer) error {
+	return template.Must(template.New("temp").Parse(temp)).Execute(w, d)
+}
+
+func (d *TempData) WriteToFile() error {
+	d.handleFilename()
+	file, err := os.Create(d.FileName)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	var buf bytes.Buffer
+	_ = d.writeTo(&buf)
+	log.Println(buf.String())
+	formatted, _ := format.Source(buf.Bytes())
+	file.Write(formatted)
+	return err
 }
