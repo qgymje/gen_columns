@@ -135,7 +135,6 @@ func (d *TempData) WriteToFile() error {
 	defer file.Close()
 	var buf bytes.Buffer
 	_ = d.writeTo(&buf)
-	log.Println(buf.String())
 	formatted, _ := format.Source(buf.Bytes())
 	file.Write(formatted)
 	return err
