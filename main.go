@@ -52,7 +52,7 @@ func main() {
 
 	filepath.Walk(*path, func(filename string, f os.FileInfo, _ error) error {
 		if filepath.Ext(filename) == ".go" {
-			if strings.Contains(filename, "_column") {
+			if strings.Contains(filename, "_column.go") {
 				return nil
 			}
 			return handleFile(filename)
