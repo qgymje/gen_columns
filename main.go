@@ -39,6 +39,7 @@ func init() {
 }
 `
 
+// TempData 表示生成template所需要的数据结构
 type TempData struct {
 	FileName    string
 	PackageName string
@@ -126,6 +127,7 @@ func (d *TempData) writeTo(w io.Writer) error {
 	return template.Must(template.New("temp").Parse(temp)).Execute(w, d)
 }
 
+// WriteToFile 将生成好的模块文件写到本地
 func (d *TempData) WriteToFile() error {
 	d.handleFilename()
 	file, err := os.Create(d.FileName)
