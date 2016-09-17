@@ -1,11 +1,11 @@
 package models
 
-type UserColumn struct {
+type _UserColumn struct {
 	ID   string
 	Name string
 }
 
-var UserColumns UserColumn
+var UserColumns _UserColumn
 
 func init() {
 	UserColumns.ID = "id"

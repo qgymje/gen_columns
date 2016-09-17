@@ -1,4 +1,4 @@
-# gen_column
+# gen_columns
 
 ### 概述
 有一个结构作为数据库表结构如下:
@@ -36,12 +36,12 @@ gen_columns -tag="bson" -path="./models/user.go"
 ```
 package models
 
-type UserColumn struct {
+type _UserColumn struct {
 	ID   string
 	Name string
 }
 
-var UserColumns UserColumn
+var UserColumns _UserColumn
 
 func init() {
 	UserColumns.ID = "id"

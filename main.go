@@ -26,12 +26,12 @@ var (
 var temp = `
 package {{.PackageName}}
 
-type {{.StructName}}Column struct {
+type _{{.StructName}}Column struct {
 {{range $key, $value := .Columns}} {{ $key }} string 
 {{end}}
 }
 
-var {{.StructName}}Columns  {{.StructName}}Column
+var {{.StructName}}Columns  _{{.StructName}}Column
 
 func init() {
 {{range $key, $value := .Columns}} {{ $.StructName}}Columns.{{$key}} = "{{$value}}" 
