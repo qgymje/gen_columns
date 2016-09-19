@@ -31,6 +31,7 @@ type _{{.StructName}}Column struct {
 {{end}}
 }
 
+// {{.StructName}}Columns {{lower .StructName}} columns name
 var {{.StructName}}Columns  _{{.StructName}}Column
 
 func init() {
@@ -120,11 +121,14 @@ func handleTags(tags string) string {
 func (d *TempData) handleFilename() {
 	absPath, _ := filepath.Abs(d.FileName)
 	basePath := filepath.Dir(absPath)
-	d.FileName = basePath + "/" + d.StructName + "_column.go"
+	d.FileName = basePath + "/" + strings.ToLower(d.StructName) + "_column.go"
 }
 
 func (d *TempData) writeTo(w io.Writer) error {
-	return template.Must(template.New("temp").Parse(temp)).Execute(w, d)
+	funcMap := template.FuncMap{
+		"lower": strings.ToLower,
+	}
+	return template.Must(template.New("temp").Funcs(funcMap).Parse(temp)).Execute(w, d)
 }
 
 // WriteToFile 将生成好的模块文件写到本地
