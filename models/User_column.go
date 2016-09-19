@@ -5,6 +5,7 @@ type _UserColumn struct {
 	Name string
 }
 
+// UserColumns user columns name
 var UserColumns _UserColumn
 
 func init() {
